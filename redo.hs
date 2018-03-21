@@ -1,11 +1,15 @@
+{-# LANGUAGE StandaloneDeriving #-}
+
 import Control.Monad (filterM, liftM)
+import Data.Map (fromList, toList, insert, adjust)
 import Data.Maybe (listToMaybe)
+import Debug.Trace (traceShow)
 import System.Directory (renameFile, removeFile, doesFileExist)
-import System.Environment (getArgs)
+import System.Environment (getArgs, getEnvironment)
 import System.Exit (ExitCode(..))
 import System.FilePath (hasExtension, replaceBaseName, takeBaseName)
 import System.IO (hPutStrLn, stderr)
-import System.Process (createProcess, waitForProcess, shell)
+import System.Process (createProcess, waitForProcess, shell, CreateProcess(..))
 
 
 
@@ -20,7 +24,9 @@ redo target = do
     where
         redo' :: FilePath -> IO ()
         redo' path = do
-            (_, _, _, ph) <- createProcess $ shell $ cmd path
+            oldEnv <- getEnvironment
+            let newEnv = toList $ adjust (++ ":.") "PATH" $ insert "REDO_TARGET" target $ fromList oldEnv
+            (_, _, _, ph) <- createProcess $ (shell $ cmd path) { env = Just newEnv}
             exit <- waitForProcess ph
             case exit of
                 ExitSuccess -> do
@@ -32,7 +38,7 @@ redo target = do
                     removeFile tmp
         tmp = target ++ "---redoing"
         printMissing = error $ "No .do file found for target `" ++ target ++ "`"
-        cmd path = unwords [ "sh", path, "0", takeBaseName target, tmp, ">", tmp ]
+        cmd path = traceShow' $ unwords [ "sh", path, "0", takeBaseName target, tmp, ">", tmp ]
 
 redoPath :: FilePath -> IO (Maybe FilePath)
 redoPath target =
@@ -45,3 +51,5 @@ redoPath target =
                 else
                     []
 
+
+traceShow' arg = traceShow arg arg
