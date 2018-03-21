@@ -1,16 +1,23 @@
-{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
+import Control.Exception (catch, IOException)
 import Control.Monad (filterM, liftM)
 import Data.Map (fromList, toList, insert, adjust)
 import Data.Maybe (listToMaybe)
+import Data.Typeable (typeOf)
 import Debug.Trace (traceShow)
-import System.Directory (renameFile, removeFile, doesFileExist)
+import GHC.IO.Exception (IOErrorType(..))
+import System.Directory (renameFile, removeFile, doesFileExist, getDirectoryContents)
 import System.Environment (getArgs, getEnvironment)
 import System.Exit (ExitCode(..))
-import System.FilePath (hasExtension, replaceBaseName, takeBaseName)
+import System.FilePath (hasExtension, replaceBaseName, takeBaseName, (</>))
 import System.IO (hPutStrLn, stderr)
+import System.IO.Error (ioeGetErrorType)
 import System.Process (createProcess, waitForProcess, shell, CreateProcess(..))
 
+
+
+traceShow' arg = traceShow arg arg
 
 
 main :: IO ()
@@ -20,7 +27,11 @@ main =
 
 redo :: String -> IO ()
 redo target = do
-    maybe printMissing redo' =<< redoPath target
+    upToDate' <- upToDate target
+    if upToDate' then
+        return ()
+    else
+        maybe printMissing redo' =<< redoPath target
     where
         redo' :: FilePath -> IO ()
         redo' path = do
@@ -38,7 +49,7 @@ redo target = do
                     removeFile tmp
         tmp = target ++ "---redoing"
         printMissing = error $ "No .do file found for target `" ++ target ++ "`"
-        cmd path = traceShow' $ unwords [ "sh", path, "0", takeBaseName target, tmp, ">", tmp ]
+        cmd path = unwords [ "sh", path, "0", takeBaseName target, tmp, ">", tmp ]
 
 redoPath :: FilePath -> IO (Maybe FilePath)
 redoPath target =
@@ -52,4 +63,18 @@ redoPath target =
                     []
 
 
-traceShow' arg = traceShow arg arg
+upToDate :: String -> IO Bool
+upToDate target = catch
+    (do
+        deps <- getDirectoryContents depDir
+        all id `liftM` mapM depUpToDate deps)
+    (\(e :: IOException) -> return False)
+        where
+            depDir = ".redo" </> target
+            depUpToDate :: FilePath -> IO Bool
+            depUpToDate dep = catch
+                (do
+                    oldMD5 <- readFile $ depDir </> dep
+                    return False)
+                (\e -> 
+                    return (ioeGetErrorType e == InappropriateType))
