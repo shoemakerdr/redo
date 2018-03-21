@@ -1,32 +1,26 @@
-import Control.Monad (filterM)
+import Control.Monad (filterM, liftM)
+import Data.Maybe (listToMaybe)
 import System.Directory (renameFile, removeFile, doesFileExist)
 import System.Environment (getArgs)
 import System.Exit (ExitCode(..))
-import System.FilePath (hasExtension, replaceBaseName)
+import System.FilePath (hasExtension, replaceBaseName, takeBaseName)
 import System.IO (hPutStrLn, stderr)
 import System.Process (createProcess, waitForProcess, shell)
 
 
 
 main :: IO ()
-main = do
-    args <- getArgs 
-    mapM_ redo args
+main = 
+    mapM_ redo =<< getArgs
 
 
 redo :: String -> IO ()
 redo target = do
-    path <- redoPath target
-    case path of
-        Nothing ->
-            error $ "No .do file found for target `" ++ target ++ "`"
-
-        Just path -> do
-            let tmp = target ++ "---redoing"
-                script = "sh " ++ path ++  " - - " ++ tmp ++ " > " ++ tmp
-            print script
-            (_, _, _, ph) <- createProcess $ 
-                shell $ script
+    maybe printMissing redo' =<< redoPath target
+    where
+        redo' :: FilePath -> IO ()
+        redo' path = do
+            (_, _, _, ph) <- createProcess $ shell $ cmd path
             exit <- waitForProcess ph
             case exit of
                 ExitSuccess -> do
@@ -36,12 +30,13 @@ redo target = do
                     hPutStrLn stderr $
                         "Redo script exited with non-zero exit code: " ++ show code
                     removeFile tmp
-
+        tmp = target ++ "---redoing"
+        printMissing = error $ "No .do file found for target `" ++ target ++ "`"
+        cmd path = unwords [ "sh", path, "0", takeBaseName target, tmp, ">", tmp ]
 
 redoPath :: FilePath -> IO (Maybe FilePath)
-redoPath target = do
-    existingCandidates <- filterM doesFileExist candidates
-    return $ safeHead existingCandidates
+redoPath target =
+    listToMaybe `liftM` filterM doesFileExist candidates
         where 
             candidates =
                 [ target ++ ".do"] ++ 
@@ -49,5 +44,4 @@ redoPath target = do
                     [replaceBaseName target "default" ++ ".do" ]
                 else
                     []
-            safeHead [] = Nothing
-            safeHead (x:_) = Just x
+
