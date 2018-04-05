@@ -11,9 +11,8 @@ import System.Directory (renameFile, removeFile, doesFileExist, getDirectoryCont
 import System.Environment (getArgs, getEnvironment)
 import System.Exit (ExitCode(..))
 import System.FilePath (hasExtension, replaceBaseName, takeBaseName, (</>))
-import System.IO (hPutStrLn, stderr, readFile, IOMode(..), openFile, hClose, withFile, hFileSize)
+import System.IO (hPutStrLn, stderr, readFile, IOMode(..), openFile, hClose)
 import System.IO.Error (ioeGetErrorType)
-import System.IO.Silently (capture)
 import System.Process (createProcess, waitForProcess, shell, CreateProcess(..), StdStream(..))
 
 
@@ -63,6 +62,7 @@ redo target = do
         printMissing = error $ "No .do file found for target `" ++ target ++ "`"
         cmd path = unwords [ "sh", path, "0", takeBaseName target, tmp ]
 
+
 redoPath :: FilePath -> IO (Maybe FilePath)
 redoPath target =
     listToMaybe `liftM` filterM doesFileExist candidates
@@ -86,6 +86,4 @@ upToDate target = catch
                     return False)
                 (\e -> 
                     return (ioeGetErrorType e == InappropriateType))
-
-
 
