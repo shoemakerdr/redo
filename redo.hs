@@ -41,10 +41,10 @@ redo target = do
             (_, _, _, ph) <- createProcess $ 
                 (shell $ cmd path) { env = Just newEnv, std_out = UseHandle stdOutFile }
             exit <- waitForProcess ph
+            hClose stdOutFile
+            doesExist <- doesFileExist tmp
             case exit of
-                ExitSuccess -> do
-                    hClose stdOutFile
-                    doesExist <- doesFileExist tmp
+                ExitSuccess -> 
                     if doesExist then do
                         renameFile tmp target
                         removeFile stdOutTmp
@@ -54,9 +54,7 @@ redo target = do
                 ExitFailure code -> do
                     hPutStrLn stderr $
                         "Redo script exited with non-zero exit code: " ++ show code
-                    hClose stdOutFile
-                    removeFile tmp
-                    removeFile stdOutTmp
+                    mapM_ removeFile (stdOutTmp : [tmp | doesExist])
         tmp = target ++ "---redoing"
         stdOutTmp = target ++ "---redoing-out"
         printMissing = error $ "No .do file found for target `" ++ target ++ "`"
